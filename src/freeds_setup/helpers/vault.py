@@ -1,3 +1,4 @@
+
 import os
 import requests
 from pathlib import Path
@@ -170,3 +171,9 @@ if __name__ == "__main__":
     print("api after delete:", client.read_plugin_config("api"))
 
     client.close()
+
+def vault_init():
+    pass
+
+def vault_import(folder_name: str):
+    pass

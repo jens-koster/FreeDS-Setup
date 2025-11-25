@@ -1,9 +1,11 @@
 import typer
 from pathlib import Path
+from freeds_setup.commands.vault_cmd import vault_app
+from freeds_setup.commands.init_cmd import init_app
 
 app = typer.Typer(help="Freeds Setup CLI")
-vault_app = typer.Typer(help="Vault operations")
 app.add_typer(vault_app, name="vault")
+app.add_typer(init_app, name="init")
 
 
 @vault_app.command("init")
