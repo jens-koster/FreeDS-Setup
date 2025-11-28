@@ -7,7 +7,8 @@ The initial operations require a specific order.
 Clones a few hard coded repos to get things going
 * the-free-data-stack
 * FreeDS CLI and packages
-* install freeds CLI in editable mode
+* install freeds CLI in editable mode using pip
+*
 
 This includes the vault plugin, which needs separate initialisation before we can do anything else.
 
