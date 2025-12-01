@@ -1,10 +1,10 @@
 
 import os
 import requests
-from pathlib import Path
 from typing import Optional
+from freeds_setup.helpers.root_config import root_config
+from freeds_setup.helpers.flog import logger
 
-os.environ['FREEDS_VAULT_URI']="http://127.0.0.1:8200"
 
 class BaoPaths:
     def __init__(self):
@@ -32,7 +32,7 @@ class BaoPaths:
 class BaoClient:
 
     def __init__(self):
-        self.root_token_file = Path.home() / ".freeds/root_token.txt"
+        self.root_token_file = root_config.known_location / ".bao"
         self.root_token: Optional[str] = None
         self.timeout = 5
         self.session = requests.Session()
@@ -114,7 +114,7 @@ class BaoClient:
         self.write_plugin_config(f"freeds/plugin-tokens/{plugin}", {"token": token})
         return token
 
-    def init(self) -> bool:
+    def initialize_vault(self) -> bool:
         """Initialize vault if not already initialized. Returns bool indicating success."""
         if self.root_token_file.exists():
             with open(self.root_token_file, "r") as f:
@@ -151,29 +151,3 @@ class BaoClient:
         self.session.close()
 
 
-# --- minimal demo ---
-if __name__ == "__main__":
-    # export FREEDS_VAULT_URI="http://127.0.0.1:8200"
-    client = BaoClient()
-    root = client.init()
-    if root:
-        print("Vault initialized. Root token:", root[:8], "…")
-    else:
-        print("Vault already initialized.")
-
-    client.write_plugin_config("api", {"URL": "http://svc:8080", "DEBUG": "true"})
-    print("api:", client.read_plugin_config("api"))
-
-    tok = client.create_plugin_token("api")
-    print("api token:", tok[:10], "…")
-
-    client.delete_plugin_config("api")
-    print("api after delete:", client.read_plugin_config("api"))
-
-    client.close()
-
-def vault_init():
-    pass
-
-def vault_import(folder_name: str):
-    pass
