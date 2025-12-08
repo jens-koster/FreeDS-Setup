@@ -1,6 +1,9 @@
 
 import os
+import re
+from pathlib import Path
 import requests
+import subprocess
 from typing import Optional
 from freeds_setup.helpers.root_config import root_config
 from freeds_setup.helpers.flog import logger
@@ -30,14 +33,25 @@ class BaoPaths:
         return f"{self.metadata_path}/{plugin}"
 
 class BaoClient:
-
+    """Client for interacting with Bao (Vault) server.
+    unseal method seems lost, but npone of that is used since I discvovered auto-unseal.
+    """
     def __init__(self):
-        self.root_token_file = root_config.known_location / ".bao"
-        self.root_token: Optional[str] = None
+        self.root_token_file = root_config.known_location / ".bao_root"
+        self.unseal_token_file = root_config.known_location / ".bao_unseal"
+
+        self.root_token: Optional[str] = self._get_content(self.root_token_file)
+        self.unseal_token: Optional[str] = self._get_content(self.unseal_token_file)
+
         self.timeout = 5
         self.session = requests.Session()
-        self.policy_name = "ro-config"
         self.paths = BaoPaths()
+
+    def _get_content(self,file_path: Path) -> Optional[str]:
+        if file_path.exists():
+            with open(file_path, "r") as f:
+                return f.read().strip()
+        return None
 
     def header(self):
         """Return headers for vault requests."""
@@ -46,7 +60,7 @@ class BaoClient:
             h["X-Vault-Token"] = self.root_token
         return h
 
-    def read_plugin_config(self, plugin: str = None)->dict:
+    def read_plugin_vault_entry(self, plugin: str = None)->dict:
         """Read plugin config from vault."""
         if not plugin:
             raise ValueError("plugin required")
@@ -58,6 +72,12 @@ class BaoClient:
         if result.status_code == 404:
             return {}
         return result.json()
+
+    def read_plugin_config(self, plugin: str = None)->dict:
+        """Read plugin config from vault."""
+        data = self.read_plugin_vault_entry(plugin)
+        return data.get("data", {}).get("data", {})
+
 
     def delete_plugin_config(self, plugin: str)->None:
         """Hard delete plugin config from vault."""
@@ -73,11 +93,13 @@ class BaoClient:
         """Write plugin config to vault."""
         if plugin is None:
             raise ValueError("plugin required")
-
+        existing = self.read_plugin_config(plugin)
+        existing.update(config)
+        data = {"data": existing}
         result = self.session.post(
             self.paths.plugin_path(plugin),
             headers=self.header(),
-            json={"data": config},
+            json=data,
             timeout=self.timeout)
         result.raise_for_status()
 
@@ -97,57 +119,67 @@ class BaoClient:
             raise RuntimeError(f"is_initialized failed, is vault running?: {r.status_code} {r.text}")
         return bool(r.json().get("initialized"))
 
-    def create_plugin_token(self, plugin: str) -> str:
-        """Create a long-lived token for a plugin, store it in vault, return it."""
-        if not plugin:
-            raise ValueError("plugin required")
-        r = self.post_raw(
-            f"{self.paths.token_path}/create-orphan",
-            {
-                "policies": [self.policy_name],
-                "ttl": "876000h",
-                "explicit_max_ttl": "876000h",
-                "display_name": plugin
-            }
-        )
-        token = r["auth"]["client_token"]
-        self.write_plugin_config(f"freeds/plugin-tokens/{plugin}", {"token": token})
-        return token
+    def initialize(self):
+        """Initialize vault and store tokens."""
+        mounts = self.session.get(f"{self.paths.v1_path}/sys/mounts", headers=self.header(), timeout=self.timeout)
+        # Check if the 'config/' path is already in the mounts
+        if f"{self.paths.mount}/" in mounts.json():
+            logger.info(f"Vault mount already enabled: '{self.paths.mount}'")
+            return
 
-    def initialize_vault(self) -> bool:
-        """Initialize vault if not already initialized. Returns bool indicating success."""
-        if self.root_token_file.exists():
-            with open(self.root_token_file, "r") as f:
-                self.root_token = f.read().strip()
-            if self.is_initialized():
-                return True
-        data = self.post_raw(self.paths.init_path, {"secret_shares": 1, "secret_threshold": 1})
-        root_token = data["root_token"]
-        self.root_token = root_token
+        self.post_raw(
+            self.paths.sys_mount_path,
+            {"type": "kv", "options": {"version": "2"}}
+        )
+        self.retrieve_tokens_from_logs()
+
+    def retrieve_tokens_from_logs(self) -> None:
+        """Retrieve tokens from vault logs and store them in the well-known location."""
+
+        log_command = ["docker", "logs", "vault"]
+
+        # Retrieve the logs from the Vault container
+        logs = subprocess.check_output(log_command, stderr=subprocess.STDOUT, text=True)
+
+        # Find the last occurrence of the Unseal Key and Root Token
+        unseal_key_match = re.findall(r"Unseal Key: (\S+)", logs)
+        root_token_match = re.findall(r"Root Token: (\S+)", logs)
+
+        if not unseal_key_match or not root_token_match:
+            raise RuntimeError("Unseal Key or Root Token not found in logs.")
+
+        # Get the last occurrences
+        self.unseal_key = unseal_key_match[-1]
+        self.root_token = root_token_match[-1]
+
+        # Store the tokens in the well-known location
         with open(self.root_token_file, "w") as f:
-            f.write(root_token)
-
-        # enable the config mount
-        try:
-            self.post_raw(
-                self.paths.sys_mount_path,
-                {"type": "kv", "options": {"version": "2"}}
-            )
-        except RuntimeError as e:
-            if "path is already in use" not in str(e):
-                raise
-
-        # global read policy for plugin tokens
-        # NOTE: HCL uses mount-relative paths, not full URLs.
-        hcl = (
-            f'path "{self.paths.mount}/data/*"     {{ capabilities = ["read"] }}\n'
-            f'path "{self.paths.mount}/metadata/*" {{ capabilities = ["list", "read"] }}\n'
-        )
-        self.post_raw(f"{self.paths.v1_path}/sys/policies/acl/{self.policy_name}", {"policy": hcl})
-
-        return self.is_initialized()
+            f.write(self.root_token)
+        with open(self.root_token_file, "w") as f:
+            f.write(self.root_token)
 
     def close(self):
         self.session.close()
 
+if __name__ == '__main__':
+    root_config.set_env()
+    bao = BaoClient()
+    logger.start("Initializing Vault for testing")
+    bao.retrieve_tokens_from_logs()
+    print(f"Root Token: {bao.root_token}")
+    bao.initialize()
+    logger.succeed()
+    logger.start("Writing plugin config")
+    bao.write_plugin_config("test_plugin", {"key1": "value"})
+    bao.write_plugin_config("test_plugin", {"key2": "value"})
+    logger.succeed()
+    import json
+    logger.start("Writing plugin config")
+    print(json.dumps(bao.read_plugin_config("test_plugin"), indent=4))
+    logger.succeed()
 
+    logger.start("Deleting plugin config")
+#    bao.delete_plugin_config("test_plugin")
+    cfg = bao.read_plugin_config("test_plugin")
+    print(f"Config after deletion: {cfg}")
+    logger.succeed()

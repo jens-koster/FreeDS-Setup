@@ -16,8 +16,9 @@ def init_freeds():
 
 def init_vault():
     """
-    Starrt and initialize vault.
+    Start and initialize vault.
     """
+    root_config.set_env()
     logger.commence("Initializing Vault")
     dc_dir = root_config.plugins_path / "the-free-data-stack" / "vault"
     logger.start("Starting vault")
@@ -72,3 +73,5 @@ def setup_root_dir() -> None:
     logger.succeed()
 
 
+if __name__ == '__main__':
+    init_vault()
