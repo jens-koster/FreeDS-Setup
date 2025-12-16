@@ -8,6 +8,9 @@ class RootConfig:
         if self.known_location.is_file():
             self.known_location.unlink()
         self.known_location.mkdir(exist_ok=True)
+        self.freeds_prefix = "FDS_"
+        self.set_env()
+
 
     def _get(self, key: str, default=None) -> str:
         file_path = self.known_location / key
@@ -20,6 +23,10 @@ class RootConfig:
     def _set(self, key: str, value:str) -> str:
         with open(self.known_location / key, "w") as f:
             f.write(value)
+
+    def make_env_name(self, plugin:str, key:str)->str:
+        """Format an env variable name fomr plugin and value name (key)."""
+        return f"{self.freeds_prefix}_{plugin.upper()}_{key.upper()}"
 
     def set_env(self)->None:
         self.get_vault_uri()
