@@ -1,12 +1,12 @@
 from freeds_setup.helpers.flog import logger
 from pathlib import Path
-import yaml
 
-import freeds_setup.helpers.bao_client as bao
-from  freeds_setup.helpers.root_config import root_config
+import freeds_setup.helpers.bao_client as bao_client
+from freeds_setup.importing.plugin_config import PluginConfig
+from freeds_setup.resource import provision
 
 
-def import_plugin(folders: Path | list[Path])-> None:
+def import_plugin(folders: Path | list[Path]) -> None:
     """
     Import a plugin, reads plugin.yaml, populates databses and secrets and stores in vault.
     """
@@ -14,15 +14,17 @@ def import_plugin(folders: Path | list[Path])-> None:
     if isinstance(folders, Path):
         folders = [folders]
 
-    logger.commence(f"Importing {len(folders)} plugins")
+    logger.commence(f"Import {len(folders)} plugins")
     for folder in folders:
-        logger.start(f"Importing plugin from folder: {folder}")
-        plugin_info = PluginInfo(folder)
-        logger.info(f"Plugin found: {plugin_info.name} dc: {plugin_info.has_docker_compose}")
-
+        logger.start(f"Import plugin from folder: {folder}")
+        plugin_config = PluginConfig(folder)
+        logger.info(f"Plugin: {plugin_config.name}, {plugin_config.path} ")
+        provision(plugin_config)
+        bao = bao_client.BaoClient()
+        bao.write_plugin_config(plugin_config.name, plugin_config.plugin_yaml)
         logger.succeed()
-
     logger.complete()
+
 
 def scan_folder(folder: Path) -> list[Path]:
     """
@@ -37,11 +39,10 @@ def scan_folder(folder: Path) -> list[Path]:
     # Recursively iterate through all subdirectories
     for subfolder in folder.rglob("*"):
         if subfolder.is_dir():
-            logger.info(f"Checking folder: {subfolder}")
             # Check if plugin.yaml exists in the folder
             plugin_yaml = subfolder / "plugin.yaml"
             if plugin_yaml.exists():
-                logger.start(f"Found plugin.yaml in: {subfolder}")
+                logger.start(f"Processing plugin.yaml in: {subfolder}")
 
                 # Check for README.md and docker-compose.yaml
                 readme = subfolder / "README.md"
@@ -64,12 +65,14 @@ def scan_folder(folder: Path) -> list[Path]:
     logger.complete(f"Scanning complete. Found {len(plugin_folders)} plugin(s).")
     return plugin_folders
 
+
 # we're storing the original plugin file in the vault.
 # everything else is stored with the expanded env name
 # thinking it makes it easier to understnad when troubleshooting.
 
 if __name__ == "__main__":
-    scan_folder(Path("./test"))
+    import_plugin(Path("/Users/jens/src/myfreeds/the-free-data-stack/postgres"))
+
     # all plugins get:
     #    * home directory
     #    * vault folder
@@ -91,93 +94,91 @@ if __name__ == "__main__":
     # re-deploy:
     # execute deployments section
 
-
     plugin = {
         # name-value for anyting the plugin wants get env variables for.
         # name will be preficed with FDS_<PLUGIN NAME>_
-        "config":{},
-        "meta":{},
+        "config": {},
+        "meta": {},
         # The dependencies are also Resources where all attributes are defaulted.
         "dependencies": {
-            'postgres':{},
-            's3':{},
-            'redis':{},
-            "kafka":{},
-            "jupyter":{},
-            "spark":{}
+            "postgres": {},
+            "s3": {},
+            "redis": {},
+            "kafka": {},
+            "jupyter": {},
+            "spark": {},
         },
         # files to be deployed for the plugin
         # there'll be a command to re-deploy these files
-
         "deployments": {
-            "dags" : {
-                # freeds knows anbout a few plugins, where you'll want to deploy into that plugin's home folder.
+            "dags": {
                 # airflow is one
+                # freeds knows anbout a few plugins, where you'll want to deploy into that plugin's home folder.
                 "type": "AirflowDags",
                 "description": "Deploy my airflow dags",
-                "params" : {
-                    "dir": "dags"
-                }
+                "params": {"dir": "dags"},
             },
-
             "bronze": {
                 "type": "S3",
                 "description": "Deploy bronze notebook folder from repo to s3 for running in the jupyter notebook plugin",
-                "params" : {
+                "params": {
                     "dir": "notebooks",
-                    }
+                },
             },
-
             "init_db": {
                 "type": "Sql",
                 "description": "Setup my database schema.",
                 # all sql files will be exocuted in alphabetical order
-                "params" : {
+                "params": {
                     "dir": "sql/db_init",
-                }
+                },
             },
         },
-
         "resources": {
-            "data":{
+            "pguser": {
+                "type": "PostgresUser",
+                "description": "A user account + password in postgres",
+                "params": {
+                    "name": "_2",  # name will be prefixed with the plugin name
+                },
+            },
+            "pgdb": {
+                "type": "PostgresDatabase",
+                "description": "A database and ",
+                "params": {
+                    "name": "_db",  # name will be prefixed with the plugin name
+                },
+            },
+            "data": {
                 "type": "Directory",
                 "description": "a directory in the plugin home directory",
                 "params": {
                     "name": "logs",
-                }
+                },
             },
-
-            "kafdrop":{
+            "kafdrop": {
                 "type": "UIPort",
                 "description": "Kafdrop kafka admin ui",
                 "params": {
-                    "ui_uri": "https://127.0.0.1:{{ FDS_KAFKA_KAFGEN_PORT }}", # again support jinja2 templating
-                }
+                    "ui_uri": "https://127.0.0.1:{{ FDS_KAFKA_KAFGEN_PORT }}",  # again support jinja2 templating
+                },
             },
-
             "listening_port": {
                 "type": "KnownPort",
                 "description": "A port defined by accepted standards",
-                "params": {
-                    "number": 5432
-                }
+                "params": {"number": 5432},
             },
-
-            "archive_bucket":{
+            "archive_bucket": {
                 "type": "S3Bucket",
                 "description": "extra bucket for archiving data",
                 "params": {
                     "name": "schema_name",
-                }
+                },
             },
-
-            "data_dir":{
+            "data_dir": {
                 "type": "AbsolutePath",
                 "description": "Some testdata for my plugin",
-                "params" : {
-                    "dir": "data"
-                }
+                "params": {"dir": "data"},
             },
-
-        }
+        },
     }

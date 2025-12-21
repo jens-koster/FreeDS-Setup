@@ -2,9 +2,10 @@ from pathlib import Path
 import typing
 import os
 import subprocess
-from freeds_setup.helpers.flog  import logger
+from freeds_setup.helpers.flog import logger
 
-def execute_dc(params: typing.List[str], work_path:Path) -> None:
+
+def execute_dc(params: typing.List[str], work_path: Path) -> None:
     start_dir = Path.cwd()
     if work_path:
         os.chdir(work_path)

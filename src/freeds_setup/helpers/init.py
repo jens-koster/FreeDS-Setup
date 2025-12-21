@@ -1,10 +1,11 @@
-import subprocess
 import git
 from freeds_setup.helpers.flog import logger
 from pathlib import Path
 from freeds_setup.helpers.root_config import root_config
 from freeds_setup.helpers.bao_client import BaoClient
 from freeds_setup.helpers.dc import execute_dc
+
+
 def init_freeds():
     """
     Initialize freeds basics, clone a few repos and setup base folders.
@@ -13,6 +14,7 @@ def init_freeds():
     setup_root_dir()
     clone_repos()
     logger.complete()
+
 
 def init_vault():
     """
@@ -33,7 +35,8 @@ def init_vault():
     bao.initialize_vault()
     logger.complete()
 
-def soft_clone(name:str, url:str, target:Path)->bool:
+
+def soft_clone(name: str, url: str, target: Path) -> bool:
     """Clone a git repo only if the target does not exist yet."""
 
     if target.exists():
@@ -43,6 +46,7 @@ def soft_clone(name:str, url:str, target:Path)->bool:
     git.Repo.clone_from(url, target)
     logger.info(f"Repo {name} cloned.")
     return True
+
 
 def clone_repos() -> None:
     logger.start("Cloning git repos")
@@ -73,5 +77,5 @@ def setup_root_dir() -> None:
     logger.succeed()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     init_vault()

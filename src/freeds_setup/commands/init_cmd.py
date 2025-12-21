@@ -4,6 +4,7 @@ from freeds_setup.helpers.flog import logger
 
 init_app = typer.Typer(help="Basic setup operations")
 
+
 @init_app.command("freeds")
 def init_freeds():
     """

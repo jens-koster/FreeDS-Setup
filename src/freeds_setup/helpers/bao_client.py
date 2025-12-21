@@ -1,4 +1,3 @@
-
 import os
 import re
 from pathlib import Path
@@ -22,7 +21,7 @@ class BaoPaths:
         self.sys_mount_path = f"{self.v1_path}/sys/mounts/{self.mount}"
         self.data_path = f"{self.v1_path}/{self.mount}/data"
         self.metadata_path = f"{self.v1_path}/{self.mount}/metadata"
-        self.token_path =f"{self.v1_path}/auth/token"
+        self.token_path = f"{self.v1_path}/auth/token"
 
     def plugin_path(self, plugin: str) -> str:
         """Return the full vault path for a plugin's config (no trailing slash)."""
@@ -32,10 +31,12 @@ class BaoPaths:
         """Return the full vault path for a plugin's config (no trailing slash)."""
         return f"{self.metadata_path}/{plugin}"
 
+
 class BaoClient:
     """Client for interacting with Bao (Vault) server.
     unseal method seems lost, but npone of that is used since I discvovered auto-unseal.
     """
+
     def __init__(self):
         self.root_token_file = root_config.known_location / ".bao_root"
         self.unseal_token_file = root_config.known_location / ".bao_unseal"
@@ -47,7 +48,7 @@ class BaoClient:
         self.session = requests.Session()
         self.paths = BaoPaths()
 
-    def _get_content(self,file_path: Path) -> Optional[str]:
+    def _get_content(self, file_path: Path) -> Optional[str]:
         if file_path.exists():
             with open(file_path, "r") as f:
                 return f.read().strip()
@@ -60,36 +61,35 @@ class BaoClient:
             h["X-Vault-Token"] = self.root_token
         return h
 
-    def read_plugin_vault_entry(self, plugin: str = None)->dict:
+    def read_plugin_vault_entry(self, plugin: str = None) -> dict:
         """Read plugin config from vault."""
         if not plugin:
             raise ValueError("plugin required")
 
         result = self.session.get(
-            self.paths.plugin_path(plugin),
-            headers=self.header(),
-            timeout=self.timeout)
+            self.paths.plugin_path(plugin), headers=self.header(), timeout=self.timeout
+        )
         if result.status_code == 404:
             return {}
         return result.json()
 
-    def read_plugin_config(self, plugin: str = None)->dict:
+    def read_plugin_config(self, plugin: str = None) -> dict:
         """Read plugin config from vault."""
         data = self.read_plugin_vault_entry(plugin)
         return data.get("data", {}).get("data", {})
 
-
-    def delete_plugin_config(self, plugin: str)->None:
+    def delete_plugin_config(self, plugin: str) -> None:
         """Hard delete plugin config from vault."""
         result = self.session.delete(
             self.paths.plugin_meta_path(plugin),
             headers=self.header(),
-            timeout=self.timeout)
+            timeout=self.timeout,
+        )
         if result.status_code == 404:
             return
         result.raise_for_status()
 
-    def write_plugin_config(self, plugin: str, config:dict)->None:
+    def write_plugin_config(self, plugin: str, config: dict) -> None:
         """Write plugin config to vault."""
         if plugin is None:
             raise ValueError("plugin required")
@@ -100,12 +100,15 @@ class BaoClient:
             self.paths.plugin_path(plugin),
             headers=self.header(),
             json=data,
-            timeout=self.timeout)
+            timeout=self.timeout,
+        )
         result.raise_for_status()
 
-    def post_raw(self, path: str, body=None)->dict:
+    def post_raw(self, path: str, body=None) -> dict:
         """POST to vault, return response json or raise."""
-        result = self.session.post(path, headers=self.header(), json=body, timeout=self.timeout)
+        result = self.session.post(
+            path, headers=self.header(), json=body, timeout=self.timeout
+        )
         if result.status_code == 204:
             return {}
         if not result.ok:
@@ -114,22 +117,29 @@ class BaoClient:
 
     def is_initialized(self) -> bool:
         """Check if vault is initialized."""
-        r = self.session.get(self.paths.init_path, headers=self.header(), timeout=self.timeout)
+        r = self.session.get(
+            self.paths.init_path, headers=self.header(), timeout=self.timeout
+        )
         if not r.ok:
-            raise RuntimeError(f"is_initialized failed, is vault running?: {r.status_code} {r.text}")
+            raise RuntimeError(
+                f"is_initialized failed, is vault running?: {r.status_code} {r.text}"
+            )
         return bool(r.json().get("initialized"))
 
     def initialize(self):
         """Initialize vault and store tokens."""
-        mounts = self.session.get(f"{self.paths.v1_path}/sys/mounts", headers=self.header(), timeout=self.timeout)
+        mounts = self.session.get(
+            f"{self.paths.v1_path}/sys/mounts",
+            headers=self.header(),
+            timeout=self.timeout,
+        )
         # Check if the 'config/' path is already in the mounts
         if f"{self.paths.mount}/" in mounts.json():
             logger.info(f"Vault mount already enabled: '{self.paths.mount}'")
             return
 
         self.post_raw(
-            self.paths.sys_mount_path,
-            {"type": "kv", "options": {"version": "2"}}
+            self.paths.sys_mount_path, {"type": "kv", "options": {"version": "2"}}
         )
         self.retrieve_tokens_from_logs()
 
@@ -161,7 +171,8 @@ class BaoClient:
     def close(self):
         self.session.close()
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     root_config.set_env()
     bao = BaoClient()
     logger.start("Initializing Vault for testing")
@@ -174,12 +185,13 @@ if __name__ == '__main__':
     bao.write_plugin_config("test_plugin", {"key2": "value"})
     logger.succeed()
     import json
+
     logger.start("Writing plugin config")
     print(json.dumps(bao.read_plugin_config("test_plugin"), indent=4))
     logger.succeed()
 
     logger.start("Deleting plugin config")
-#    bao.delete_plugin_config("test_plugin")
+    #    bao.delete_plugin_config("test_plugin")
     cfg = bao.read_plugin_config("test_plugin")
     print(f"Config after deletion: {cfg}")
     logger.succeed()

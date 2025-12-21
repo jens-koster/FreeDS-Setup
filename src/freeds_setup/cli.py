@@ -1,4 +1,3 @@
-import os
 import typer
 from pathlib import Path
 from freeds_setup.commands.init_cmd import init_app
@@ -11,11 +10,12 @@ root_config.set_env()
 app.add_typer(init_app, name="init")
 
 
-
 @app.command("scan")
 def scan(
-    folder: Path = typer.Argument('.', help="Optional folder name to scan"),
-    import_flag: bool = typer.Option(False, "--import", "-i", help="Import flag to enable importing")
+    folder: Path = typer.Argument(".", help="Optional folder name to scan"),
+    import_flag: bool = typer.Option(
+        False, "--import", "-i", help="Import flag to enable importing"
+    ),
 ):
     """
     Scan a folder and optionally import its contents.
@@ -32,9 +32,7 @@ def scan(
 
 
 @app.command("import")
-def scan(
-    folder: Path = typer.Argument(..., help="Optional folder name to scan")
-):
+def importx(folder: Path = typer.Argument(..., help="Optional folder name to scan")):
     """
     import a plugin
     """

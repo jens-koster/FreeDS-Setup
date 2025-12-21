@@ -1,38 +1,57 @@
 from freeds_setup.resource.resource_classes import resource_classes
 from freeds_setup.helpers.flog import logger
-from pathlib import Path
 from freeds_setup.importing.plugin_config import PluginConfig
-import typing
 
 
+def set_if_not_exists(target:dict, name:str, value:dict)->None:
+    if name in target:
+        logger.info(f'Resource {name} already set')
+        return
+    target[name] = value
+
+def process_dependencies(plugin_config:PluginConfig)->None:
+
+    plugin = plugin_config.name
+    logger.info(f'processing {len(plugin_config.dependencies)} dependencies for plugin {plugin}')
+    for dependency, _ in plugin_config.dependencies.items():
+        logger.info(f'Dependency {dependency}')
+        if dependency == 'postgres':
+            resource = {
+                    "type": "PostgresUser",
+                    "description": "Default user account + password in postgres for {plugin}",
+                }
+            set_if_not_exists(
+                target = plugin_config.resources,
+                name = f'{plugin}_pguser',
+                value = resource
+                )
+            resource = {
+                        "type": "PostgresDatabase",
+                        "description": "Default postgres database for {plugin}",
+                    }
+            set_if_not_exists(
+                target = plugin_config.resources,
+                name = f'{plugin}_pgdb',
+                value = resource
+                )
 
 
-def provision_resource(self, type, description:str, name:str, params:dict)->dict[str:str]:
-        """Create the requeated resource and provide the env variables to use it"""
+def provision(plugin_config:PluginConfig)->None:
+    """Provision resources and update config."""
+    plugin = plugin_config.name
+    process_dependencies(plugin_config)
+    for name, resource in plugin_config.resources:
+        type = resource['type']
+        description = resource['description']
+        params = resource['params']
         resource_class = resource_classes.get(type.lower())
         if not resource_class:
-            raise ValueError(f"Unknown resource type: {type} found in plugin {self.name}")
+            raise ValueError(f"Unknown resource type: {type} found in plugin {plugin}")
         resource = resource_class(
-            plugin_name=self.name,
+            plugin_name=plugin,
+            name = name,
             description=description,
-            name=name,
             params=params
         )
-        return resource.provision()
-
-
-
-def provision_dependencies(plugin_config:PluginConfig)->dict[str, typing.Any]:
-    """
-    Provision the resources.
-    """
-
-    for name, config in plugin_config.dependencies.items():
-        type = config.get("type")
-        description = config.get("description", f"{type} {name} for plugin {plugin_config.name}")
-        provision_resource(
-            type= type,
-            description=description,
-            name=name,
-            params=config.get("params", {}),
-        )
+        resource.provision()
+        PluginConfig.config.update(resource.config)
