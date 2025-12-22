@@ -3,6 +3,7 @@ import typing
 import os
 import subprocess
 from freeds_setup.helpers.flog import logger
+from freeds_setup.importing.plugin_config import PluginConfig
 
 
 def execute_dc(params: typing.List[str], work_path: Path) -> None:
@@ -20,3 +21,11 @@ def execute_dc(params: typing.List[str], work_path: Path) -> None:
         print(f"Docker compose command failed: {e}.")
     finally:
         os.chdir(start_dir)
+
+
+def start_plugin(plugin_config: PluginConfig) -> None:
+    execute_dc(["up", "-d"], work_path=plugin_config.path)
+
+
+def stop_plugin(plugin_config: PluginConfig) -> None:
+    execute_dc(["down"], work_path=plugin_config.path)

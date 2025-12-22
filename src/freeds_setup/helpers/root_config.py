@@ -32,34 +32,34 @@ class RootConfig:
         self.get_freeds_root()
 
     def get_freeds_root(self) -> Path:
+        """Freeds root is the top level folder for a freeds stack."""
         root = Path(self._get("freeds_dir"))
-        os.environ["FREEDS_ROOT_PATH"] = str(root)
+        os.environ["FDS_ROOT_PATH"] = str(root)
         return root
 
     def set_freeds_root(self, freeds_root_path: Path) -> None:
-        os.environ["FREEDS_ROOT_PATH"] = str(freeds_root_path)
+        """Freeds root is the top level folder for a freeds stack."""
+        os.environ["FDS_ROOT_PATH"] = str(freeds_root_path)
         self._set("freeds_dir", str(freeds_root_path))
 
     def get_vault_uri(self) -> str:
         vault_uri = self._get("vault_uri", "http://127.0.0.1:8200")
-        os.environ["FREEDS_VAULT_URI"] = vault_uri
+        os.environ["FDS_VAULT_URI"] = vault_uri
         return vault_uri
 
     def set_vault_uri(self, vault_uri) -> None:
-        os.environ["FREEDS_VAULT_URI"] = vault_uri
+        os.environ["FDS_VAULT_URI"] = vault_uri
         self._set("vault_uri", vault_uri)
 
     @property
     def plugins_path(self) -> Path:
+        """Plugins path is where plugins repos are cloned."""
         return self.get_freeds_root() / "plugins"
 
     @property
     def data_path(self) -> Path:
+        """Data path contains mountable data directories for plugins."""
         return self.get_freeds_root() / "data"
-
-    @property
-    def assets_path(self) -> Path:
-        return self.get_freeds_root() / "assets"
 
 
 root_config = RootConfig()

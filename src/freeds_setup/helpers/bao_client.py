@@ -6,6 +6,7 @@ import subprocess
 from typing import Optional
 from freeds_setup.helpers.root_config import root_config
 from freeds_setup.helpers.flog import logger
+import pyperclip
 
 
 class BaoPaths:
@@ -173,25 +174,29 @@ class BaoClient:
 
 
 if __name__ == "__main__":
-    root_config.set_env()
     bao = BaoClient()
-    logger.start("Initializing Vault for testing")
     bao.retrieve_tokens_from_logs()
     print(f"Root Token: {bao.root_token}")
-    bao.initialize()
-    logger.succeed()
-    logger.start("Writing plugin config")
-    bao.write_plugin_config("test_plugin", {"key1": "value"})
-    bao.write_plugin_config("test_plugin", {"key2": "value"})
-    logger.succeed()
-    import json
+    pyperclip.copy(bao.root_token)
+    # root_config.set_env()
+    # bao = BaoClient()
+    # logger.start("Initializing Vault for testing")
+    # bao.retrieve_tokens_from_logs()
+    # print(f"Root Token: {bao.root_token}")
+    # bao.initialize()
+    # logger.succeed()
+    # logger.start("Writing plugin config")
+    # bao.write_plugin_config("test_plugin", {"key1": "value"})
+    # bao.write_plugin_config("test_plugin", {"key2": "value"})
+    # logger.succeed()
+    # import json
 
-    logger.start("Writing plugin config")
-    print(json.dumps(bao.read_plugin_config("test_plugin"), indent=4))
-    logger.succeed()
+    # logger.start("Writing plugin config")
+    # print(json.dumps(bao.read_plugin_config("test_plugin"), indent=4))
+    # logger.succeed()
 
-    logger.start("Deleting plugin config")
-    #    bao.delete_plugin_config("test_plugin")
-    cfg = bao.read_plugin_config("test_plugin")
-    print(f"Config after deletion: {cfg}")
-    logger.succeed()
+    # logger.start("Deleting plugin config")
+    # #    bao.delete_plugin_config("test_plugin")
+    # cfg = bao.read_plugin_config("test_plugin")
+    # print(f"Config after deletion: {cfg}")
+    # logger.succeed()

@@ -1,9 +1,11 @@
 from freeds_setup.helpers.flog import logger
+from graphlib import TopologicalSorter
 from pathlib import Path
-
+from freeds_setup.helpers.root_config import root_config
 import freeds_setup.helpers.bao_client as bao_client
+import freeds_setup.helpers.dc as dc
 from freeds_setup.importing.plugin_config import PluginConfig
-from freeds_setup.resource import provision
+from freeds_setup.resource.provision import provision_all
 
 
 def import_plugin(folders: Path | list[Path]) -> None:
@@ -19,59 +21,48 @@ def import_plugin(folders: Path | list[Path]) -> None:
         logger.start(f"Import plugin from folder: {folder}")
         plugin_config = PluginConfig(folder)
         logger.info(f"Plugin: {plugin_config.name}, {plugin_config.path} ")
-        provision(plugin_config)
+        provision_all(plugin_config)
         bao = bao_client.BaoClient()
         bao.write_plugin_config(plugin_config.name, plugin_config.plugin_yaml)
+        new_config = PluginConfig(plugin_name=plugin_config.name)
+        dc.start_plugin(new_config)
         logger.succeed()
     logger.complete()
 
 
-def scan_folder(folder: Path) -> list[Path]:
+def scan(path: Path = None) -> list[PluginConfig]:
     """
     Scan folder and subfolders for plugins (folders with plugin.yaml).
-    Checks if README.md or docker-compose.yaml exists in the same folder.
     """
-    logger.commence(f"Scanning folder: {folder}")
+    if path is None:
+        path = root_config.plugins_path
 
-    # List to store plugin folders
-    plugin_folders = []
+    logger.info(f"Scanning: {path}")
+    plugin_configs = []
 
-    # Recursively iterate through all subdirectories
-    for subfolder in folder.rglob("*"):
+    for subfolder in path.rglob("*"):
         if subfolder.is_dir():
-            # Check if plugin.yaml exists in the folder
-            plugin_yaml = subfolder / "plugin.yaml"
-            if plugin_yaml.exists():
-                logger.start(f"Processing plugin.yaml in: {subfolder}")
+            if (subfolder / "plugin.yaml").exists():
+                p = PluginConfig(plugin_path=subfolder)
+                plugin_configs.append(p)
 
-                # Check for README.md and docker-compose.yaml
-                readme = subfolder / "README.md"
-                docker_compose = subfolder / "docker-compose.yaml"
-
-                if readme.exists():
-                    logger.info(f"README.md found in: {subfolder}")
-                else:
-                    logger.warn(f"README.md missing in: {subfolder}")
-
-                if docker_compose.exists():
-                    logger.info(f"docker-compose.yaml found in: {subfolder}")
-                else:
-                    logger.warn(f"docker-compose.yaml missing in: {subfolder}")
-
-                # Add the folder to the plugin list
-                plugin_folders.append(subfolder)
-                logger.succeed(f"Plugin folder added: {subfolder}")
-
-    logger.complete(f"Scanning complete. Found {len(plugin_folders)} plugin(s).")
-    return plugin_folders
+    logger.info(f"Found plugins: {list([p.name for p in plugin_configs])}.")
+    return plugin_configs
 
 
-# we're storing the original plugin file in the vault.
-# everything else is stored with the expanded env name
-# thinking it makes it easier to understnad when troubleshooting.
+def sort_plugins(plugin_configs: list[PluginConfig]) -> list[PluginConfig]:
+    """Sort plugins in dependency order."""
+    plugin_configs = {p.name: p for p in plugin_configs}
+    deps = {p.name: p.dependecies for p in plugin_configs.values()}
+    ts = TopologicalSorter(deps)
+    sorted = list(ts.static_order())
+    logger.info(f"Plugin sorted order:{sorted}")
+    return list(plugin_configs[name] for name in sorted)
+
 
 if __name__ == "__main__":
-    import_plugin(Path("/Users/jens/src/myfreeds/the-free-data-stack/postgres"))
+    scan()
+    # import_plugin(Path("/Users/jens/src/myfreeds/the-free-data-stack/postgres"))
 
     # all plugins get:
     #    * home directory
