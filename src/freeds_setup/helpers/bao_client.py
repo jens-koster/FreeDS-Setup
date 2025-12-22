@@ -12,9 +12,9 @@ import pyperclip
 class BaoPaths:
     def __init__(self):
         self.mount = "config"
-        addr = os.environ.get("FREEDS_VAULT_URI")
+        addr = os.environ.get("FDS_VAULT_URI")
         if not addr:
-            raise RuntimeError("FREEDS_VAULT_URI is not set")
+            raise RuntimeError("FDS_VAULT_URI is not set")
         self.uri = addr.rstrip("/")
 
         self.v1_path = f"{self.uri}/v1"
@@ -144,7 +144,7 @@ class BaoClient:
         )
         self.retrieve_tokens_from_logs()
 
-    def retrieve_tokens_from_logs(self) -> None:
+    def retrieve_tokens_from_logs(self):
         """Retrieve tokens from vault logs and store them in the well-known location."""
 
         log_command = ["docker", "logs", "vault"]

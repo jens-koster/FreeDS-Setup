@@ -1,4 +1,5 @@
 from pathlib import Path
+import os
 import yaml
 import typing
 import uuid
@@ -18,7 +19,7 @@ class PluginConfig:
             raise ValueError("plugin_path or plugin_name must be be provided")
 
         if plugin_path:
-            self.plugin_data = self.load_yaml(plugin_path.resolve())
+            self.plugin_data = self._read_file(plugin_path.resolve())
             self.config["plugin_name"] = plugin_path.name
             self.config["plugin_path"] = str(plugin_path)
             if "plugin_id" not in self.config:
@@ -42,7 +43,7 @@ class PluginConfig:
     def path(self) -> Path:
         return Path(self.config["plugin_path"])
 
-    def load_yaml(self, plugin_path: Path) -> dict:
+    def _read_file(self, plugin_path: Path) -> dict:
         """
         Load the plugin.yaml file and extract the dictionary from the root element "plugin".
         """
@@ -59,12 +60,27 @@ class PluginConfig:
             raise ValueError(f"Root element 'plugin' not found in {plugin_data_path}")
         return yaml_data["plugin"]
 
+    def save_to_vault(self):
+        bao = BaoClient()
+        bao.write_plugin_config(self.name, self.plugin_data)
+
     def _assert_dict(self, root_dict: str) -> dict[str, typing.Any]:
         """Create sub dict if needed and return it
         ensures manipulating these properties gets reflected in the main dict"""
         if root_dict not in self.plugin_data:
             self.plugin_data[root_dict] = {}
         return self.plugin_data.get(root_dict)
+
+    def set_env(self):
+        for key, value in self.get_env().items():
+            os.environ[key] = value
+
+    def get_env(self)->dict:
+        env = {}
+        for key, value in self.config.items():
+            env_name = f'FDS_{self.name.upper()}_{key.upper()}'
+            env[env_name] = value
+        return env
 
     @property
     def dependencies(self) -> dict[str, typing.Any]:

@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 import secrets
 import string
-
+from freeds_setup.helpers.root_config import root_config
 
 class Resource(ABC):
     """
@@ -14,6 +14,9 @@ class Resource(ABC):
         self.name = name
         self.params = params or {}
         self.config = {}
+
+    def _get_param(self, name)->str:
+        return self.params.get(name) or ''
 
     @abstractmethod
     def provision(self) -> None:
@@ -30,6 +33,16 @@ class AdminAccount(Resource):
         # get some random chars
         password = "".join(secrets.choice(alphabet) for _ in range(10))
         self.config["admin_password"] = password
+
+
+class DataDir(Resource):
+    def provision(self):
+        """Create a directory data/<plugin>, a name for a subdir in the folder can be proved in params."""
+        name = self._get_param('name')
+        data_dir = root_config.data_path / self.plugin_name / name
+        data_dir.mkdir(parents=True, exist_ok=True)
+        suffix = '_' + name if name else ''
+        self.config[f"datadir{suffix}"] = str(data_dir)
 
 
 class PostgresDatabase(Resource):

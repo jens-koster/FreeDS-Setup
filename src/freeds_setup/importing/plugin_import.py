@@ -8,24 +8,23 @@ from freeds_setup.importing.plugin_config import PluginConfig
 from freeds_setup.resource.provision import provision_all
 
 
-def import_plugin(folders: Path | list[Path]) -> None:
+def import_plugins(plugin_configs: PluginConfig | list[PluginConfig]) -> None:
     """
     Import a plugin, reads plugin.yaml, populates databses and secrets and stores in vault.
     """
 
-    if isinstance(folders, Path):
-        folders = [folders]
+    if isinstance(plugin_configs, PluginConfig):
+        plugin_configs = [plugin_configs]
 
-    logger.commence(f"Import {len(folders)} plugins")
-    for folder in folders:
-        logger.start(f"Import plugin from folder: {folder}")
-        plugin_config = PluginConfig(folder)
-        logger.info(f"Plugin: {plugin_config.name}, {plugin_config.path} ")
+    logger.commence(f"Import {len(plugin_configs)} plugins")
+    for plugin_config in plugin_configs:
+        logger.start(f"Plugin: {plugin_config.name}, {plugin_config.path} ")
         provision_all(plugin_config)
         bao = bao_client.BaoClient()
-        bao.write_plugin_config(plugin_config.name, plugin_config.plugin_yaml)
+        bao.write_plugin_config(plugin_config.name, plugin_config.plugin_data)
         new_config = PluginConfig(plugin_name=plugin_config.name)
         dc.start_plugin(new_config)
+
         logger.succeed()
     logger.complete()
 
@@ -51,21 +50,35 @@ def scan(path: Path = None) -> list[PluginConfig]:
 
 
 def sort_plugins(plugin_configs: list[PluginConfig]) -> list[PluginConfig]:
-    """Sort plugins in dependency order."""
+    """Sort plugins in dependency order, vault is always first."""
     plugin_configs = {p.name: p for p in plugin_configs}
-    deps = {p.name: p.dependecies for p in plugin_configs.values()}
+    vault = None
+    if "vault" in plugin_configs:
+        vault = plugin_configs.pop('vault')
+
+    deps = {p.name: p.dependencies for p in plugin_configs.values()}
     ts = TopologicalSorter(deps)
-    sorted = list(ts.static_order())
-    logger.info(f"Plugin sorted order:{sorted}")
-    return list(plugin_configs[name] for name in sorted)
+    sorted_keys = list(ts.static_order())
+    sorted_plugin_configs = list(plugin_configs[name] for name in sorted_keys)
+    if vault:
+        sorted_plugin_configs.insert(0, vault)
+    logger.info(f"Plugin sorted order:{list([r.name for r in sorted_plugin_configs])}")
+    return sorted_plugin_configs
 
 
 if __name__ == "__main__":
-    scan()
+
+    from freeds_setup.helpers.root_config import root_config
+    root_config.set_env()
+    plugins = scan(Path("/Users/jens/src/myfreeds/the-free-data-stack"))
+    plugins = sort_plugins(plugins)
+    import_plugins(plugins)
+
     # import_plugin(Path("/Users/jens/src/myfreeds/the-free-data-stack/postgres"))
 
     # all plugins get:
     #    * home directory
+
     #    * vault folder
     #    * env vars:
     #        FDS_<PLUGIN NAME>_VAULT_URI
