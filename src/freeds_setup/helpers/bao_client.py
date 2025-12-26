@@ -116,6 +116,7 @@ class BaoClient:
             raise RuntimeError(f"POST failed: {result.status_code} {result.text}")
         return result.json()
 
+
     def is_initialized(self) -> bool:
         """Check if vault is initialized."""
         r = self.session.get(
@@ -172,12 +173,26 @@ class BaoClient:
     def close(self):
         self.session.close()
 
+    def list_plugins(self)->list[str]:
+        """List all plugins in the vault"""
+        url = f"{self.paths.metadata_path}?list=true"
+
+        r = self.session.get(
+            url,
+            headers=self.header(),
+            timeout=self.timeout,
+        )
+        if r.status_code == 404:
+            return []
+        r.raise_for_status()
+        keys = r.json().get("data", {}).get("keys", [])
+        return keys
+
+
 
 if __name__ == "__main__":
     bao = BaoClient()
-    bao.retrieve_tokens_from_logs()
-    print(f"Root Token: {bao.root_token}")
-    pyperclip.copy(bao.root_token)
+    print(bao.list_plugins())
     # root_config.set_env()
     # bao = BaoClient()
     # logger.start("Initializing Vault for testing")

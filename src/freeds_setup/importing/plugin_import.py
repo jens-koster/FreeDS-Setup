@@ -1,11 +1,59 @@
 from freeds_setup.helpers.flog import logger
-from graphlib import TopologicalSorter
+
 from pathlib import Path
 from freeds_setup.helpers.root_config import root_config
 import freeds_setup.helpers.bao_client as bao_client
 import freeds_setup.helpers.dc as dc
+from freeds_setup.importing.plugin_config import PluginConfig, sort_plugins
+from freeds_setup.importing.resource_classes import resource_classes
+from freeds_setup.helpers.flog import logger
 from freeds_setup.importing.plugin_config import PluginConfig
-from freeds_setup.resource.provision import provision_all
+
+
+def set_if_not_exists(target: dict, name: str, value: dict) -> None:
+    if name in target:
+        logger.info(f"Resource {name} already set")
+        return
+    target[name] = value
+
+
+def process_dependencies(plugin_config: PluginConfig) -> None:
+
+    plugin = plugin_config.name
+    logger.info(
+        f"processing {len(plugin_config.dependencies)} dependencies for plugin {plugin}"
+    )
+    for dependency, _ in plugin_config.dependencies.items():
+        logger.info(f"Dependency {dependency}")
+        if dependency == "postgres":
+            resource = {
+                "type": "PostgresUser",
+                "description": "Default user account + password in postgres for {plugin}",
+            }
+            set_if_not_exists(
+                target=plugin_config.resources, name=f"{plugin}_pguser", value=resource
+            )
+            resource = {
+                "type": "PostgresDatabase",
+                "description": "Default postgres database for {plugin}",
+            }
+            set_if_not_exists(
+                target=plugin_config.resources, name=f"{plugin}_pgdb", value=resource
+            )
+
+
+def provision_all(plugin_config: PluginConfig) -> None:
+    """Provision resources and update config."""döo
+    plugin = plugin_config.name
+    process_dependencies(plugin_config)
+    for name, resource in plugin_config.resources.items():
+        type = resource["type"]
+        resource_class = resource_classes.get(type.lower())
+        if not resource_class:
+            raise ValueError(f"Unknown resource type: {type} found in plugin {plugin}")
+        resource = resource_class(plugin_config, name, resource)
+        resource.provision()
+        plugin_config.config.update(resource.config)
 
 
 def import_plugins(plugin_configs: PluginConfig | list[PluginConfig]) -> None:
@@ -22,7 +70,7 @@ def import_plugins(plugin_configs: PluginConfig | list[PluginConfig]) -> None:
         provision_all(plugin_config)
         bao = bao_client.BaoClient()
         bao.write_plugin_config(plugin_config.name, plugin_config.plugin_data)
-        new_config = PluginConfig(plugin_name=plugin_config.name)
+        new_config = PluginConfig(plugin_config.name)
         dc.start_plugin(new_config)
 
         logger.succeed()
@@ -42,34 +90,21 @@ def scan(path: Path = None) -> list[PluginConfig]:
     for subfolder in path.rglob("*"):
         if subfolder.is_dir():
             if (subfolder / "plugin.yaml").exists():
-                p = PluginConfig(plugin_path=subfolder)
+                p = PluginConfig(subfolder)
                 plugin_configs.append(p)
 
     logger.info(f"Found plugins: {list([p.name for p in plugin_configs])}.")
     return plugin_configs
 
 
-def sort_plugins(plugin_configs: list[PluginConfig]) -> list[PluginConfig]:
-    """Sort plugins in dependency order, vault is always first."""
-    plugin_configs = {p.name: p for p in plugin_configs}
-    vault = None
-    if "vault" in plugin_configs:
-        vault = plugin_configs.pop('vault')
 
-    deps = {p.name: p.dependencies for p in plugin_configs.values()}
-    ts = TopologicalSorter(deps)
-    sorted_keys = list(ts.static_order())
-    sorted_plugin_configs = list(plugin_configs[name] for name in sorted_keys)
-    if vault:
-        sorted_plugin_configs.insert(0, vault)
-    logger.info(f"Plugin sorted order:{list([r.name for r in sorted_plugin_configs])}")
-    return sorted_plugin_configs
+
 
 
 if __name__ == "__main__":
-
-    from freeds_setup.helpers.root_config import root_config
-    root_config.set_env()
+    # print(get_all_plugins())
+    # from freeds_setup.helpers.root_config import root_config
+    # root_config.set_env()
     plugins = scan(Path("/Users/jens/src/myfreeds/the-free-data-stack"))
     plugins = sort_plugins(plugins)
     import_plugins(plugins)

@@ -1,4 +1,5 @@
 from pathlib import Path
+from graphlib import TopologicalSorter
 import os
 import yaml
 import typing
@@ -11,17 +12,13 @@ class PluginConfig:
     Class to hold information about a plugin.
     """
 
-    def __init__(self, plugin_path: Path = None, plugin_name: str = None):
+    def __init__(self, plugin: Path | str):
+        """Load plugin config, if Path is provided it is loaded from file else from vault."""
 
-        if plugin_path and plugin_name:
-            raise ValueError("plugin_path and plugin_name can't both be provided")
-        if not plugin_path and not plugin_name:
-            raise ValueError("plugin_path or plugin_name must be be provided")
-
-        if plugin_path:
-            self.plugin_data = self._read_file(plugin_path.resolve())
-            self.config["plugin_name"] = plugin_path.name
-            self.config["plugin_path"] = str(plugin_path)
+        if isinstance(plugin, Path):
+            self.plugin_data = self._read_file(plugin.resolve())
+            self.config["plugin_name"] = plugin.name
+            self.config["plugin_path"] = str(plugin)
             if "plugin_id" not in self.config:
                 self.config["plugin_id"] = uuid.uuid4().hex
             p = self.path / "README.md"
@@ -33,7 +30,7 @@ class PluginConfig:
                 self.meta["dc"] = str(p)
         else:
             bao = BaoClient()
-            self.plugin_data = bao.read_plugin_config(plugin_name)
+            self.plugin_data = bao.read_plugin_config(plugin)
 
     @property
     def name(self):
@@ -43,11 +40,11 @@ class PluginConfig:
     def path(self) -> Path:
         return Path(self.config["plugin_path"])
 
-    def _read_file(self, plugin_path: Path) -> dict:
+    def _read_file(self, plugin: Path) -> dict:
         """
         Load the plugin.yaml file and extract the dictionary from the root element "plugin".
         """
-        plugin_data_path = plugin_path / "plugin.yaml"
+        plugin_data_path = plugin / "plugin.yaml"
         if not plugin_data_path.exists():
             raise FileNotFoundError(f"plugin.yaml not found in {self.path}")
 
@@ -79,9 +76,18 @@ class PluginConfig:
         env = {}
         for key, value in self.config.items():
             env_name = f'FDS_{self.name.upper()}_{key.upper()}'
-            env[env_name] = value
+            env[env_name] = str(value)
         return env
 
+    @property
+    def ports(self)->list[int]:
+        p = []
+        for name, r in self.resources.items():
+            if r['type'].lower() in ('knownport', 'ui'):
+                port = r.get('params',{}).get('number',None)
+                if port:
+                    p.append(int(port))
+        return p
     @property
     def dependencies(self) -> dict[str, typing.Any]:
         return self._assert_dict("dependencies")
@@ -101,3 +107,28 @@ class PluginConfig:
     @property
     def meta(self) -> dict[str, typing.Any]:
         return self._assert_dict("meta")
+
+    def __repr__(self)->str:
+        return f"<PluginConfig {self.name}>"
+
+
+def sort_plugins(plugin_configs: list[PluginConfig]) -> list[PluginConfig]:
+    """Sort plugins in dependency order, vault is always first."""
+    plugin_configs = {p.name: p for p in plugin_configs}
+    vault = None
+    if "vault" in plugin_configs:
+        vault = plugin_configs.pop('vault')
+
+    deps = {p.name: p.dependencies for p in plugin_configs.values()}
+    ts = TopologicalSorter(deps)
+    sorted_keys = list(ts.static_order())
+    sorted_plugin_configs = list(plugin_configs[name] for name in sorted_keys)
+    if vault:
+        sorted_plugin_configs.insert(0, vault)
+    return sorted_plugin_configs
+
+
+def get_all_plugins()->list[PluginConfig]:
+    bao = BaoClient()
+    plugins= list([PluginConfig(p) for p in bao.list_plugins()])
+    return sort_plugins(plugins)

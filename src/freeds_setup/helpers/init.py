@@ -4,8 +4,8 @@ from freeds_setup.helpers.flog import logger
 from pathlib import Path
 from freeds_setup.helpers.root_config import root_config
 from freeds_setup.helpers.bao_client import BaoClient
-from freeds_setup.helpers.dc import execute_dc
-import freeds_setup.resource.provision as resource_provision
+from freeds_setup.helpers.dc import start_plugin
+import freeds_setup.importing.plugin_import as plugin_import
 from  freeds_setup.importing.plugin_config import PluginConfig
 
 def init_freeds():
@@ -25,19 +25,18 @@ def init_vault():
 
     logger.commence("Initializing Vault")
     # it's a hardcoded requiremen that the vault plugin is located here
-    dc_dir = root_config.plugins_path / "the-free-data-stack" / "vault"
+    vault_dir = root_config.plugins_path / "the-free-data-stack" / "vault"
     # do the import, except we need ot avoid using the vault before it exists
-    plugin_config = PluginConfig(dc_dir)
-    resource_provision.provision_all(plugin_config)
-    plugin_config.set_env()
+    plugin_config = PluginConfig(vault_dir)
+    plugin_import.provision_all(plugin_config)
     logger.start("Starting vault")
-    execute_dc(["up", "-d"], dc_dir)
+    start_plugin(plugin_config=plugin_config)
     time.sleep(2)
     logger.succeed()
 
     bao = BaoClient()
-    bao.initialize()
     bao.retrieve_tokens_from_logs()
+    bao.initialize()
     plugin_config.save_to_vault()
     logger.complete()
 
