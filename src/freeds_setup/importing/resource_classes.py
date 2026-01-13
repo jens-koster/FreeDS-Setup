@@ -48,6 +48,31 @@ class AdminAccount(Resource):
         password = "".join(secrets.choice(alphabet) for _ in range(10))
         self.config["admin_password"] = password
 
+class UserAccount(Resource):
+    def provision(self):
+        """Provision a username and a random password."""
+        service = self._get_param("service")
+        user = self.plugin_name
+        self.config[f"{service}_user"] = user
+        # character pool for the password
+        alphabet = string.ascii_letters + string.digits + string.punctuation
+        # get some random chars
+        password = "".join(secrets.choice(alphabet) for _ in range(10))
+        self.config[f"{service}_password"] = password
+        services = {
+            's3': self.provision_s3
+        }
+        provision_method = services.get(service)
+        if not provision_method:
+            raise ValueError(f'Unknown service in resource {self.plugin_name}.{self.name}: {service}')
+        provision_method(user=user, password=password)
+
+    def provision_s3(self, user:str, password:str):
+        """Create bucket and provision user"""
+
+        pass
+
+
 
 class DataDir(Resource):
     def provision(self):
@@ -90,8 +115,6 @@ class PostgresDatabase(Resource):
 
 class S3(Resource):
     pass
-
-
 
 class KnownPort(InformationalResource):
     """Allow plugins to reserve specific ports, typically a well know port for some service."""

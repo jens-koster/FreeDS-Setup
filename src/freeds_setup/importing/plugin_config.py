@@ -12,8 +12,12 @@ class PluginConfig:
     Class to hold information about a plugin.
     """
 
-    def __init__(self, plugin: Path | str):
+    def __init__(self, plugin: Path | str = None):
         """Load plugin config, if Path is provided it is loaded from file else from vault."""
+        if not plugin:
+            plugin = os.environ.get('FDS_CURRENT_PLUGIN_NAME')
+        if not plugin:
+            raise ValueError(f'plugin name must be provided either as parameter or as env FDS_CURRENT_PLUGIN_NAME.')
 
         if isinstance(plugin, Path):
             self.plugin_data = self._read_file(plugin.resolve())
@@ -31,6 +35,8 @@ class PluginConfig:
         else:
             bao = BaoClient()
             self.plugin_data = bao.read_plugin_config(plugin)
+            if not self.plugin_data:
+                raise ValueError(f'Plugin {plugin} not found in vault.')
 
     @property
     def name(self):
